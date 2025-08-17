@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🌍 Global Live Translation Board</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1.5.1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f6f8;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h2 {
+            margin: 20px;
+            color: #333;
+        }
+
+        #chat-container {
+            width: 500px;
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #messages {
+            border-bottom: 1px solid #ddd;
+            height: 400px;
+            overflow-y: auto;
+            padding: 15px;
+            background-color: #fafafa;
+        }
+
+        .message {
+            margin: 8px 0;
+            padding: 8px 12px;
+            border-radius: 8px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+
+        .sender {
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .room-label {
+            font-size: 0.8em;
+            color: #888;
+            margin-left: 5px;
+        }
+
+        .user-message {
+            background-color: #e0f7fa;
+            align-self: flex-start;
+        }
+
+        .other-message {
+            background-color: #ffe0b2;
+            align-self: flex-end;
+        }
+
+        #input-container {
+            display: flex;
+            padding: 10px;
+            background-color: #f0f0f0;
+        }
+
+        input, select, button {
+            padding: 8px;
+            margin-right: 5px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <h2>🌍 Global Live Translation Board</h2>
+
+    <div id="chat-container">
+        <div id="messages"></div>
+
+        <div id="input-container">
+            <input type="text" id="msg" placeholder="Type message..." />
+            <select id="lang">
+                <option value="en">English</option>
+                <option value="es">Spanish</option>
+                <option value="fr">French</option>
+                <option value="hi">Hindi</option>
+            </select>
+
+            <select id="room">
+                <option value="room1">Room 1</option>
+                <option value="room2">Room 2</option>
+                <option value="room3">Room 3</option>
+            </select>
+
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <script>
+        var userName = prompt("Enter your name") || "User1";
+        var stompClient = null;
+
+        function connect() {
+            var socket = new SockJS('/chat');
+            stompClient = Stomp.over(socket);
+
+            stompClient.connect({}, function () {
+                // Subscribe to all rooms
+                stompClient.subscribe('/topic/room1', displayMessage);
+                stompClient.subscribe('/topic/room2', displayMessage);
+                stompClient.subscribe('/topic/room3', displayMessage);
+            });
+        }
+
+        function sendMessage() {
+            var text = document.getElementById("msg").value;
+            var lang = document.getElementById("lang").value;
+            var room = document.getElementById("room").value;
+
+            if(text.trim() === "") return;
+
+            stompClient.send("/app/sendMessage", {}, JSON.stringify({
+                'sender': userName,
+                'content': text,
+                'language': lang,
+                'room': room
+            }));
+
+            document.getElementById("msg").value = "";
+        }
+
+        function displayMessage(msg) {
+            var message = JSON.parse(msg.body);
+            var messagesDiv = document.getElementById("messages");
+
+            var div = document.createElement("div");
+            div.classList.add("message");
+
+            // Different style for own messages vs others
+            if(message.sender === userName) {
+                div.classList.add("user-message");
+            } else {
+                div.classList.add("other-message");
+            }
+
+            div.innerHTML = "<div class='sender'>" + message.sender +
+                            " <span class='room-label'>[" + message.room + "]</span></div>" +
+                            "<div class='content'>" + message.content + "</div>";
+
+            messagesDiv.appendChild(div);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight; // auto scroll
+        }
+
+        connect();
+    </script>
+</body>
+</html>
