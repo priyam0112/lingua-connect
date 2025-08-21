@@ -130,7 +130,8 @@
 
     <script>
         var userName = prompt("Enter your name") || "User" + Math.floor(Math.random()*1000);
-        var preferredLang = prompt("Choose your language: en (English), es (Spanish), fr (French), hi (Hindi)") || "en";
+        var preferredLang = prompt("Choose your language: en, es, fr, hi, de, it, ja, zh, ar, ...") || "en";
+
         var stompClient = null;
 
         document.getElementById("user-info").innerText =
