@@ -1,5 +1,6 @@
 package com.translator.demo.Service;
 
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -7,73 +8,88 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class TranslationService {
 
-    private Map<String, Map<String, String>> translationCache = new HashMap<>();
+
+    private final StringRedisTemplate redisTemplate;
 
     private static final String API_KEY = "RTKS08R-RJ4MTTK-GGJ2787-C157J7T";
     private static final String API_URL = "https://api.lecto.ai/v1/translate/text";
 
+    private static final long CACHE_TTL = 24;
+
+    public TranslationService(StringRedisTemplate redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
+
     public String translate(String text, String targetLang) {
-        // Check cache first
-        if (translationCache.containsKey(text) && translationCache.get(text).containsKey(targetLang)) {
-            return translationCache.get(text).get(targetLang);
+        String cacheKey = text + ":" + targetLang;
+        String cached = null;
+        try{
+            // 1. Check Redis cache
+            cached = redisTemplate.opsForValue().get(cacheKey);
+        } catch(Exception e){
+            System.err.println("⚠️ Redis failed" + e.getMessage());
+        }
+
+        if (cached != null) {
+            System.out.println("✅ Cache hit for: " + cacheKey);
+            return cached;
+        }else {
+            System.out.println("❌ Cache miss for: " + cacheKey + " -> Calling API");
         }
 
         try {
-            // Create connection
-            URL url = new URL(API_URL);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setRequestProperty("x-api-key", API_KEY);
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setDoOutput(true);
+            // 2. Call API (same as before)
+            String translatedText = callTranslationApi(text, targetLang);
 
-            // Request body (single text + targetLang)
-            String body = "{"
-                    + "\"texts\": [\"" + text + "\"],"
-                    + "\"to\": [\"" + targetLang + "\"],"
-                    + "\"from\": \"en\""
-                    + "}";
-
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(body.getBytes());
-                os.flush();
-            }
-
-            // Read response
-            StringBuilder response = new StringBuilder();
-            try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
-                String line;
-                while ((line = br.readLine()) != null) {
-                    response.append(line);
-                }
-            }
-
-            String responseBody = response.toString();
-
-            // Extract translation manually without JSON lib
-            String translatedText = extractTranslation(responseBody);
-
-            // Cache result
-            translationCache.computeIfAbsent(text, k -> new HashMap<>())
-                    .put(targetLang, translatedText);
+            // 3. Store in Redis with TTL
+            redisTemplate.opsForValue().set(cacheKey, translatedText, CACHE_TTL, TimeUnit.HOURS);
 
             return translatedText;
 
         } catch (Exception e) {
             e.printStackTrace();
-            return text; // fallback: return original text
+            return text; // fallback
         }
+        
     }
 
-    /**
-     * Naive extractor for the first translated string
-     */
+    private String callTranslationApi(String text, String targetLang) throws Exception {
+        // Your existing HTTP POST logic here
+        // Return extracted translation
+        URL url = new URL(API_URL);
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("x-api-key", API_KEY);
+        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setDoOutput(true);
+
+        String body = "{"
+                + "\"texts\": [\"" + text + "\"],"
+                + "\"to\": [\"" + targetLang + "\"],"
+                + "\"from\": \"en\""
+                + "}";
+
+        try (OutputStream os = conn.getOutputStream()) {
+            os.write(body.getBytes());
+            os.flush();
+        }
+
+        StringBuilder response = new StringBuilder();
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                response.append(line);
+            }
+        }
+
+        return extractTranslation(response.toString());
+    }
+    
     private String extractTranslation(String response) {
         // Example response: {"translations":[{"to":"es","translated":["Hola"]}], "from":"en"}
         String marker = "\"translated\":[\"";
