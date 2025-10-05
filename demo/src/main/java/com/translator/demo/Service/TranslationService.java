@@ -16,7 +16,7 @@ public class TranslationService {
 
     private final StringRedisTemplate redisTemplate;
 
-    private static final String API_KEY = "RTKS08R-RJ4MTTK-GGJ2787-C157J7T";
+    private static final String API_KEY = "add lecto api key";
     private static final String API_URL = "https://api.lecto.ai/v1/translate/text";
 
     private static final long CACHE_TTL = 24;
